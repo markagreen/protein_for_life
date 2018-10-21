@@ -1,0 +1,408 @@
+---
+title: "New (2015-16) NDNS Analyses"
+author: Mark A Green
+output: html_notebook
+---
+
+Rerunning the key analysies previously performed on the NDNS data for inclusion in the paper. First, we will load the required parts of R (libraries) for performing analyses, and load in the data that we need (code hidden).
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+# Libraries
+library(data.table)
+library(ggplot2)
+library(survey)
+
+# Data #
+
+# Individual characteristics
+ind_yr7_8 <- fread("../../../../Documents/NDNS/UKDA-6533-tab/tab/ndns_rp_yr7-8a_indiv.tab")
+
+# Total nutrients over survey period for indiviuals
+ind_tot_nut_yr7_8 <- fread("../../../../Documents/NDNS/UKDA-6533-tab/tab/ndns_rp_yr7-8a_personleveldietarydata.tab")
+
+# Food eaten per day for individuals
+ind_day_food_yr7_8 <- fread("../../../../Documents/NDNS/UKDA-6533-tab/tab/ndns_rp_yr7-8a_dayleveldietarydata_foods.tab")
+
+# Nutrients eaten per day for individuals
+ind_day_nut_yr7_8 <- fread("../../../../Documents/NDNS/UKDA-6533-tab/tab/ndns_rp_yr7-8a_dayleveldietarydata_nutrients.tab")
+
+# Individual meal records for all individuals
+ind_meals_yr7_8 <- fread("../../../../Documents/NDNS/UKDA-6533-tab/tab/ndns_rp_yr7-8a_foodleveldietarydata.tab")
+
+
+## Data cleaning ##
+
+# Put together all 90 year olds
+ind_tot_nut_yr7_8$Age[ind_tot_nut_yr7_8$Age > 90] <- 90 
+
+# Recode tenure
+ind_yr7_8$tenure[ind_yr7_8$tenure == 1 | ind_yr7_8$tenure == 2] <- 1 # Owner-occupied
+ind_yr7_8$tenure[ind_yr7_8$tenure == 3 | ind_yr7_8$tenure == 4] <- 2 # Rent (Social)
+ind_yr7_8$tenure[ind_yr7_8$tenure == 5 | ind_yr7_8$tenure == 6] <- 3 # Rent (Private)
+
+# Recode Chew
+ind_yr7_8$Chew[ind_yr7_8$Chew == 1] <- 0 # No difficulty
+ind_yr7_8$Chew[ind_yr7_8$Chew > 1] <- 1 # Some difficulty
+
+# Recode education
+# 1 = 1 degree
+ind_yr7_8$qual7[ind_yr7_8$qual7 == 2 | ind_yr7_8$qual7 == 3] <- 2 # 2/3 A level
+ind_yr7_8$qual7[ind_yr7_8$qual7 == 4 | ind_yr7_8$qual7 == 5] <- 3 # 4/5 GCSE
+ind_yr7_8$qual7[ind_yr7_8$qual7 == 7] <- 4 # 7 No quals
+ind_yr7_8$qual7[ind_yr7_8$qual7 == 6 | ind_yr7_8$qual7 == 8] <- NA # 6 missing as is 8
+
+# Recode general health
+ind_yr7_8$GenHelf[ind_yr7_8$GenHelf == 1 | ind_yr7_8$GenHelf == 2] <- 0 # Good health
+ind_yr7_8$GenHelf[ind_yr7_8$GenHelf >= 3] <- 1 # Poor health
+
+hold <- ind_yr7_8[, c("seriali", "tenure", "MarSt2", "Month", "surveyyr", "qual7", "ethgrp5", "ethgrp2", 
+                      "eqvinc", "eqv3", "hhinc", "wti_Y78", "Veg", "vegetarn", "GenHelf",  
+                      "AnyOwn", "DentUse", "Chew", "wtval", 
+                      "bmival", "qeimd", "qwimd", "qsimd", "qnimd")]
+ind_tot_nut_yr7_8 <- merge(ind_tot_nut_yr7_8, hold, by = "seriali", all.x = T) # Join together
+
+ind_tot_nut_yr7_8 <- as.data.frame(ind_tot_nut_yr7_8)
+ind_tot_nut_yr7_8[,378:403] <- sapply(ind_tot_nut_yr7_8[,378:403], function(x)ifelse(x<0,NA,x))
+
+```
+
+Ok. I will go one by one to generate all of the plots required.
+
+####1. Proportion of protein consumed by age and sex (England only)
+
+```{r}
+ind_tot_nut_yr7_8$Sex <- as.factor(ind_tot_nut_yr7_8$Sex) # For ggplot2 purposes
+ind_tot_nut_yr7_8 <- ind_tot_nut_yr7_8[ind_tot_nut_yr7_8$Country ==  "England",] # To match other data
+
+fig1 <- ggplot(ind_tot_nut_yr7_8,
+          aes(x=Age, y=ProteinpcfoodE, group = Sex, color = Sex, weight=wti_Y78)) +
+          stat_summary(fun.y="mean", geom="point") + # Fit mean y value at each x value
+          geom_smooth(method = "loess", size = 1.2) + # LOESS smooth curve
+          scale_x_continuous(breaks = seq(40,90,by=10)) + # Number of tick marks x-axis
+          scale_y_continuous(breaks = seq(13,21,by=2)) + # Number of tick marks x-axis
+          coord_cartesian(ylim=c(13, 21), xlim=c(40,90)) +
+          ylab("Percentage (%)") + # Label y axis
+          theme(legend.position="bottom") + # Put legend at bottom
+          theme(legend.title=element_blank()) + # Remove legend title
+          scale_color_manual(labels = c("Male", "Female"), values = c("orangered2", "dodgerblue2"))
+ggsave(filename = "./figure1.pdf", fig1, width = 7, height = 7, dpi = 300)
+fig1
+
+```
+
+####2. Proportion of protein consumed by age and IMD quintile (England only)
+
+```{r}
+ind_tot_nut_yr7_8$qeimd <- as.factor(ind_tot_nut_yr7_8$qeimd) # For ggplot2 purposes
+ind_tot_nut_yr7_8$Age2 <- ind_tot_nut_yr7_8$Age # Create second age variable
+ind_tot_nut_yr7_8$Age2[ind_tot_nut_yr7_8$Age2 > 80] <- 80 # Too few people above 80 by quintile
+males <- ind_tot_nut_yr7_8[ind_tot_nut_yr7_8$Sex == 1,] 
+
+fig2m <- ggplot(males,
+          aes(x=Age2, y=ProteinpcfoodE, group = qeimd, color = qeimd, weight=wti_Y78)) +
+          stat_summary(fun.y="mean", geom="point") + # Fit mean y value at each x value
+          geom_smooth(method = "loess", size = 1.2, fullrange=TRUE) + # LOESS smooth curve
+          scale_x_continuous(breaks = seq(40,80,by=10)) + # Number of tick marks x-axis
+          scale_y_continuous(breaks = seq(13,21,by=2)) + # Number of tick marks x-axis
+          coord_cartesian(ylim=c(13, 21), xlim=c(40,80)) +
+          ylab("Percentage (%)") + # Label y axis
+          theme(legend.position="bottom") + # Put legend at bottom
+          theme(legend.title=element_blank()) + # Remove legend title
+          scale_color_manual(labels = c("Quintile 1", "Quintile 2", 
+                                        "Quintile 3", "Quintile 4", "Quintile 5"),
+                     values = c("blueviolet", "dodgerblue4", "dodgerblue1", "deepskyblue", "lightskyblue1"))
+fig2m
+ggsave(filename = "./figure2m.pdf", fig2m, width = 7, height = 7, dpi = 300)
+
+```
+
+
+```{r}
+females <- ind_tot_nut_yr7_8[ind_tot_nut_yr7_8$Sex == 2,] 
+
+fig2f <- ggplot(females,
+          aes(x=Age2, y=ProteinpcfoodE, group = qeimd, color = qeimd, weight=wti_Y78)) +
+          stat_summary(fun.y="median", geom="point") + # Fit mean y value at each x value
+          geom_smooth(method = "loess", size = 1.2, fullrange=TRUE) + # LOESS smooth curve
+          scale_x_continuous(breaks = seq(40,80,by=10)) + # Number of tick marks x-axis
+          scale_y_continuous(breaks = seq(13,21,by=2)) + # Number of tick marks x-axis
+          coord_cartesian(ylim=c(13, 21), xlim=c(40,80)) +
+          ylab("Percentage (%)") + # Label y axis
+          theme(legend.position="bottom") + # Put legend at bottom
+          theme(legend.title=element_blank()) + # Remove legend title
+          scale_color_manual(labels = c("Quintile 1", "Quintile 2", 
+                                        "Quintile 3", "Quintile 4", "Quintile 5"),
+                     values = c("blueviolet", "dodgerblue4", "dodgerblue1", "deepskyblue", "lightskyblue1"))
+fig2f
+ggsave(filename = "./figure2f.pdf", fig2f, width = 7, height = 7, dpi = 300)
+
+```
+
+####3. Recommended protein intake
+
+0.8 grams per kg body mass
+
+```{r}
+ind_tot_nut_yr7_8$rec_pro_08 <- NULL
+ind_tot_nut_yr7_8$rec_pro_08[ind_tot_nut_yr7_8$Proteing >= (ind_tot_nut_yr7_8$wtval * 0.8)] <- 1
+ind_tot_nut_yr7_8$rec_pro_08[ind_tot_nut_yr7_8$Proteing <= (ind_tot_nut_yr7_8$wtval * 0.8)] <- 0
+
+ind_tot_nut_yr7_8$Sex <- as.factor(ind_tot_nut_yr7_8$Sex) # So ggplot recognises as factor 
+
+fig3_08 <- ggplot(ind_tot_nut_yr7_8,
+            aes(x=Age, y=as.numeric(rec_pro_08), group = Sex, color = Sex, weight=wti_Y78)) +
+            geom_smooth(method = "loess", size = 1.2) + # LOESS smooth curve
+            coord_cartesian(ylim=c(0,1), xlim=c(40,90)) +
+            xlab("Age") +
+            ylab("Proportion consuming 0.8g/kg body mass") + # Label y axis
+            theme(legend.position="bottom") + # Put legend at bottom
+            theme(legend.title=element_blank()) + # Remove legend title
+            scale_color_manual(labels = c("Male", "Female"), values = c("orangered2", "dodgerblue2"))
+ggsave(filename = "./figure3_08.pdf", fig3_08, width = 7, height = 7, dpi = 300)
+fig3_08
+
+```
+
+Other scenarios:
+
+```{r}
+# Calcuate different recommendations (0.1g/kg additions)
+ind_tot_nut_yr7_8$rec_pro_09 <- NULL
+ind_tot_nut_yr7_8$rec_pro_09[ind_tot_nut_yr7_8$Proteing >= (ind_tot_nut_yr7_8$wtval * 0.9)] <- 1
+ind_tot_nut_yr7_8$rec_pro_09[ind_tot_nut_yr7_8$Proteing <= (ind_tot_nut_yr7_8$wtval * 0.9)] <- 0
+
+ind_tot_nut_yr7_8$rec_pro_10 <- NULL
+ind_tot_nut_yr7_8$rec_pro_10[ind_tot_nut_yr7_8$Proteing >= (ind_tot_nut_yr7_8$wtval * 1.0)] <- 1
+ind_tot_nut_yr7_8$rec_pro_10[ind_tot_nut_yr7_8$Proteing <= (ind_tot_nut_yr7_8$wtval * 1.0)] <- 0
+
+ind_tot_nut_yr7_8$rec_pro_11 <- NULL
+ind_tot_nut_yr7_8$rec_pro_11[ind_tot_nut_yr7_8$Proteing >= (ind_tot_nut_yr7_8$wtval * 1.1)] <- 1
+ind_tot_nut_yr7_8$rec_pro_11[ind_tot_nut_yr7_8$Proteing <= (ind_tot_nut_yr7_8$wtval * 1.1)] <- 0
+
+ind_tot_nut_yr7_8$rec_pro_12 <- NULL
+ind_tot_nut_yr7_8$rec_pro_12[ind_tot_nut_yr7_8$Proteing >= (ind_tot_nut_yr7_8$wtval * 1.2)] <- 1
+ind_tot_nut_yr7_8$rec_pro_12[ind_tot_nut_yr7_8$Proteing <= (ind_tot_nut_yr7_8$wtval * 1.2)] <- 0
+
+# Calculate age bands
+ind_tot_nut_yr7_8$age_band <- NA
+ind_tot_nut_yr7_8$age_band[ind_tot_nut_yr7_8$Age >= 18 & ind_tot_nut_yr7_8$Age < 40] <- 0
+ind_tot_nut_yr7_8$age_band[ind_tot_nut_yr7_8$Age >= 40 & ind_tot_nut_yr7_8$Age < 55] <- 1
+ind_tot_nut_yr7_8$age_band[ind_tot_nut_yr7_8$Age >= 55 & ind_tot_nut_yr7_8$Age < 70] <- 2
+ind_tot_nut_yr7_8$age_band[ind_tot_nut_yr7_8$Age >= 70] <- 3
+
+## To calcuate subgroup averages ##
+data.w <- svydesign(ids = ~1, data = ind_tot_nut_yr7_8, weights = ind_tot_nut_yr7_8$wti_Y78)
+
+## By sex ##
+svyby(~rec_pro_08, ~Sex+age_band, design = data.w, svymean, na.rm=TRUE)
+svyby(~rec_pro_09, ~Sex+age_band, design = data.w, svymean, na.rm=TRUE)
+svyby(~rec_pro_10, ~Sex+age_band, design = data.w, svymean, na.rm=TRUE)
+svyby(~rec_pro_11, ~Sex+age_band, design = data.w, svymean, na.rm=TRUE)
+svyby(~rec_pro_12, ~Sex+age_band, design = data.w, svymean, na.rm=TRUE)
+
+```
+
+####4. Timing of protein through the day
+
+Overall
+
+```{r}
+# Plot mean protein intake (g) per hour by sex
+ind_meals_yr7_8$hour <- substr(ind_meals_yr7_8$MealTime, 1, 2) # Take only hour
+ind_meals_yr7_8$hour2 <- as.numeric(sub(":", "", ind_meals_yr7_8$hour)) # Convert to number (and removed ':')
+
+# Create age bands
+ind_meals_yr7_8$age_band <- NA
+ind_meals_yr7_8$age_band[ind_meals_yr7_8$Age >= 18 & ind_meals_yr7_8$Age < 40] <- 0
+ind_meals_yr7_8$age_band[ind_meals_yr7_8$Age >= 40 & ind_meals_yr7_8$Age < 55] <- 1
+ind_meals_yr7_8$age_band[ind_meals_yr7_8$Age >= 55 & ind_meals_yr7_8$Age < 70] <- 2
+ind_meals_yr7_8$age_band[ind_meals_yr7_8$Age >= 70] <- 3
+
+# Aggregate protein by hour per day for total in eating occassion
+ind_meals_yr7_8$Sex <- as.numeric(ind_meals_yr7_8$Sex)
+pro_per_hr <- ind_meals_yr7_8[, list(sex=max(Sex), age_band=max(age_band), proteing = sum(Proteing), totalg=sum(TotalGrams)), 
+                              by = c("hour2", "seriali", "DayNo")]
+
+# Join on sample weight
+wt <- ind_yr7_8[,c("seriali", "wti_Y78")]
+pro_per_hr <- merge(pro_per_hr, wt, by = "seriali", all.x = T) 
+
+pro_per_hr$sex <- as.factor(pro_per_hr$sex) # So ggplot recognises as factor
+
+# Split into age bands for analysis
+pro_per_hr_alladults <- pro_per_hr[pro_per_hr$age_band >= 0]
+pro_per_hr_40plus <- pro_per_hr[pro_per_hr$age_band >= 1]
+pro_per_hr_40t55 <- pro_per_hr[pro_per_hr$age_band == 1]
+pro_per_hr_55t70 <- pro_per_hr[pro_per_hr$age_band == 2]
+pro_per_hr_70pluus <- pro_per_hr[pro_per_hr$age_band == 3]
+
+# Plot
+fig4 <- ggplot(pro_per_hr_40plus, 
+                aes(x=hour2, y=proteing, group = sex, color=sex, weight=wti_Y78)) +
+                stat_summary(fun.y="mean", geom="line") + # Fit mean y value at each x value
+                scale_x_continuous(breaks = seq(0,23,by=2)) + # Number of tick marks x-axis
+                scale_y_continuous(breaks = seq(0,30,by=5)) + # Number of tick marks y-axis
+                coord_cartesian(ylim=c(0,30), xlim=c(0,23)) + # To keep consistent axes across plots
+                ylab("Mean protein (g) of food consumed") + # Label y axis
+                xlab("Hour") +
+                scale_color_manual(labels = c("Male", "Female"), values = c("orangered2", "dodgerblue2"))
+ggsave(filename = "./figure4.pdf", fig4, width = 7, height = 7, dpi = 300)
+fig4
+
+```
+
+By age group
+
+```{r, echo = TRUE}
+fig4a <- ggplot(pro_per_hr_40t55, 
+                aes(x=hour2, y=proteing, group = sex, color=sex, weight=wti_Y78)) +
+                stat_summary(fun.y="mean", geom="line") + # Fit mean y value at each x value
+                scale_x_continuous(breaks = seq(0,23,by=2)) + # Number of tick marks x-axis
+                scale_y_continuous(breaks = seq(0,30,by=05)) + # Number of tick marks y-axis
+                coord_cartesian(ylim=c(0,30), xlim=c(0,23)) + # To keep consistent axes across plots
+                ylab("Mean protein (g) of food consumed") + # Label y axis
+                xlab("Hour") +
+                scale_color_manual(labels = c("Male", "Female"), values = c("orangered2", "dodgerblue2"))
+ggsave(filename = "./figure4_44_55.pdf", fig4a, width = 7, height = 7, dpi = 300)
+fig4a
+
+fig4b <- ggplot(pro_per_hr_55t70, 
+                aes(x=hour2, y=proteing, group = sex, color=sex, weight=wti_Y78)) +
+                stat_summary(fun.y="mean", geom="line") + # Fit mean y value at each x value
+                scale_x_continuous(breaks = seq(0,23,by=2)) + # Number of tick marks x-axis
+                scale_y_continuous(breaks = seq(0,30,by=05)) + # Number of tick marks y-axis
+                coord_cartesian(ylim=c(0,30), xlim=c(0,23)) + # To keep consistent axes across plots
+                ylab("Mean protein (g) of food consumed") + # Label y axis
+                xlab("Hour") +
+                scale_color_manual(labels = c("Male", "Female"), values = c("orangered2", "dodgerblue2"))
+ggsave(filename = "./figure4_55_70.pdf", fig4b, width = 7, height = 7, dpi = 300)
+fig4b
+
+fig4c <- ggplot(pro_per_hr_70pluus, 
+                aes(x=hour2, y=proteing, group = sex, color=sex, weight=wti_Y78)) +
+                stat_summary(fun.y="mean", geom="line") + # Fit mean y value at each x value
+                scale_x_continuous(breaks = seq(0,23,by=2)) + # Number of tick marks x-axis
+                scale_y_continuous(breaks = seq(0,30,by=5)) + # Number of tick marks y-axis
+                coord_cartesian(ylim=c(0,30), xlim=c(0,23)) + # To keep consistent axes across plots
+                ylab("Mean protein (g) of food consumed") + # Label y axis
+                xlab("Hour") +
+                scale_color_manual(labels = c("Male", "Female"), values = c("orangered2", "dodgerblue2"))
+ggsave(filename = "./figure4_70p.pdf", fig4c, width = 7, height = 7, dpi = 300)
+fig4c
+
+
+```
+
+####5. Sources of protein
+
+First up males.
+
+```{r}
+# Manipulate data
+prtn_food <- ind_meals_yr7_8[, list(Proteing = sum(Proteing), Age = max(Age), Sex = max(Sex)), 
+                             by = c("MainFoodGroupDesc", "seriali")] # Aggregate protein intake across days
+tot_prtn <- prtn_food[, list(tot_prtn = sum(Proteing)), by = "seriali"] # Calculate total protein intake
+prtn_food <- merge(prtn_food, tot_prtn, by = c("seriali"), all.x = TRUE) # Join together
+
+# Create age bands
+prtn_food$age_band <- NA
+prtn_food$age_band[prtn_food$Age >= 18 & prtn_food$Age < 40] <- 0
+prtn_food$age_band[prtn_food$Age >= 40 & prtn_food$Age < 55] <- 1
+prtn_food$age_band[prtn_food$Age >= 55 & prtn_food$Age < 70] <- 2
+prtn_food$age_band[prtn_food$Age >= 70] <- 3
+
+# Join on sample weight
+wt <- ind_yr7_8[,c("seriali", "wti_Y78", "qeimd")]
+prtn_food <- merge(prtn_food, wt, by = "seriali", all.x = T) 
+
+# Calculate % protein from meal of daily total
+prtn_food$pc_day_prtn <- NA 
+prtn_food$pc_day_prtn <- (prtn_food$Proteing / prtn_food$tot_prtn) * 100
+
+# Aggregate data to main groups only
+mgrp_prtn <- prtn_food[, list(Proteing = sum(Proteing), tot_prtn = max(tot_prtn), wti_Y78 = max(wti_Y78), Sex = max(Sex), age_band = max(age_band), qeimd = max(qeimd)),
+                       by = c("MainFoodGroupDesc", "seriali")]
+
+# Add in times individuals do not eat a product (i.e. 0s)
+# Convert data to wide format
+hold1 <- dcast(mgrp_prtn, seriali + age_band + Sex + tot_prtn + wti_Y78 + qeimd ~ MainFoodGroupDesc, value.var = "Proteing") # Reshape to wide format
+hold2 <- apply(hold1[,c(3:62)], 2, function(x) {x[is.na(x)] <- 0; x}) # Fill in missing data with 0s (i.e. where have not eaten a food)
+food_wide <- cbind(hold1[,1:2], hold2) # Join back together
+food_long <- melt(food_wide, id.vars=c("seriali", "age_band", "Sex", "qeimd", "tot_prtn", "wti_Y78"))
+food_long <- as.data.table(food_long)
+rm(hold1, hold2, food_wide)
+
+# Calculate % protein from meal of daily total (value = Proteing)
+food_long$pc_day_prtn <- NA 
+food_long$pc_day_prtn <- (food_long$value / food_long$tot_prtn) * 100
+
+# Calculate mean % of daily protein account by food group
+#mgrp_prtn <- prtn_food[, list(pc_day_prtn = weighted.mean(pc_day_prtn, wti_Y56, na.rm=T)), by = c("MainFoodGroupDesc", "Sex", "age_band")] # Calcuate daily protein intake
+mgrp_prtn <- food_long[, list(pc_day_prtn = mean(pc_day_prtn)), by = c("variable", "Sex", "age_band")] # Calcuate daily protein intake
+
+mgrp_prtn_1 <- mgrp_prtn[mgrp_prtn$age_band == 1,]
+mgrp_prtn_1$age_band <- NULL
+names(mgrp_prtn_1)[names(mgrp_prtn_1) == "pc_day_prtn"] <- "Aged 40-54"
+
+mgrp_prtn_2 <- mgrp_prtn[mgrp_prtn$age_band == 2,]
+mgrp_prtn_2$age_band <- NULL
+names(mgrp_prtn_2)[names(mgrp_prtn_2) == "pc_day_prtn"] <- "Aged 55-69"
+
+mgrp_prtn_3 <- mgrp_prtn[mgrp_prtn$age_band == 3,]
+mgrp_prtn_3$age_band <- NULL
+names(mgrp_prtn_3)[names(mgrp_prtn_3) == "pc_day_prtn"] <- "Aged 70+"
+
+maingrp <- merge(mgrp_prtn_1, mgrp_prtn_2, by = c("variable", "Sex"), all = TRUE) # Join back together
+maingrp <- merge(maingrp, mgrp_prtn_3, by = c("variable", "Sex"), all = TRUE) 
+maingrp <- maingrp[order(maingrp$Sex, -maingrp$`Aged 40-54`),]
+rm(mgrp_prtn_1, mgrp_prtn_2, mgrp_prtn_3)
+
+# Print
+options(digits = 2) # Decimal places
+options(scipen = 50) # Get rid of printing e+01 etc
+head(maingrp[maingrp$Sex == 1], 100)[,c(1,3:5)] # Second part selects variables to display
+
+```
+
+
+Next up - Females:
+
+```{r}
+head(maingrp[maingrp$Sex == 2], 100)[,c(1,3:5)] 
+```
+
+Awesome. How about by SES? First males again.
+
+```{r}
+mgrp_prtn_imd <- food_long[, list(pc_day_prtn = mean(pc_day_prtn)), by = c("variable", "Sex", "age_band", "qeimd")] # Calcuate daily protein intake
+
+mgrp_prtn_1 <- mgrp_prtn_imd[mgrp_prtn_imd$age_band == 1,]
+mgrp_prtn_1$age_band <- NULL
+names(mgrp_prtn_1)[names(mgrp_prtn_1) == "pc_day_prtn"] <- "Aged 40-54"
+
+mgrp_prtn_2 <- mgrp_prtn_imd[mgrp_prtn_imd$age_band == 2,]
+mgrp_prtn_2$age_band <- NULL
+names(mgrp_prtn_2)[names(mgrp_prtn_2) == "pc_day_prtn"] <- "Aged 55-69"
+
+mgrp_prtn_3 <- mgrp_prtn_imd[mgrp_prtn_imd$age_band == 3,]
+mgrp_prtn_3$age_band <- NULL
+names(mgrp_prtn_3)[names(mgrp_prtn_3) == "pc_day_prtn"] <- "Aged 70+"
+
+maingrp_imd <- merge(mgrp_prtn_1, mgrp_prtn_2, by = c("variable", "Sex", "qeimd"), all = TRUE) # Join back together
+maingrp_imd <- merge(maingrp_imd, mgrp_prtn_3, by = c("variable", "Sex", "qeimd"), all = TRUE) 
+maingrp_imd <- maingrp_imd[order(maingrp_imd$Sex, -maingrp_imd$qeimd, -maingrp_imd$`Aged 40-54`),]
+rm(mgrp_prtn_1, mgrp_prtn_2, mgrp_prtn_3)
+
+# Print
+head(maingrp_imd[maingrp_imd$Sex == 1], 100)[,c(1,3:6)] # Second part selects variables to display
+
+```
+
+And then females.
+
+```{r}
+head(maingrp_imd[maingrp_imd$Sex == 2], 100)[,c(1,3:6)] # Second part selects variables to display
+
+```
+
+

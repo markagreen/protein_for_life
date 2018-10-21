@@ -1,0 +1,653 @@
+---
+title: "Supermarket Graphs"
+output: html_notebook
+---
+
+```{r include=FALSE, echo=FALSE}
+library(ggplot2)
+```
+
+The notebook is for recreating the graphs during my time at the High Street Supermarket.
+
+```{r}
+
+mean_prtn_dat <- read.csv("./Overall Protein/Overall Protein/mean_protein_age.csv")
+mean_prtn_dat <- mean_prtn_dat[mean_prtn_dat$GENDER == "M" | mean_prtn_dat$GENDER == "F",] # Drop missing data
+mean_prtn_dat$GENDER <- factor(mean_prtn_dat$GENDER, levels = rev(levels(mean_prtn_dat$GENDER))) # Reverse order for graph
+mean_prtn_dat <- mean_prtn_dat[mean_prtn_dat$Age_130316 >= 40 & mean_prtn_dat$Age_130316 <=90,] # Drop below age 90
+
+mean_prtn_dat$tot_prtn_pc_low <- mean_prtn_dat$tot_prtn_pc - (mean_prtn_dat$tot_prtn_pc_stderr * 1.96) # 95% CIs
+mean_prtn_dat$tot_prtn_pc_high <- mean_prtn_dat$tot_prtn_pc + (mean_prtn_dat$tot_prtn_pc_stderr * 1.96)
+
+ggplot(mean_prtn_dat, aes(x=Age_130316, y=tot_prtn_pc, group=GENDER, color=GENDER)) +
+        geom_line(size = 1.2) + # Plot as line plot
+        geom_ribbon(data = mean_prtn_dat, aes(ymin=mean_prtn_dat$tot_prtn_pc_low, ymax=mean_prtn_dat$tot_prtn_pc_high), alpha=0.1, colour=NA) +
+        #ylim(13,21) +
+        scale_y_continuous(breaks=seq(13, 21, by=2), limits=c(13, 21)) +
+        xlim(40,90) +
+        ylab("Percentage (%)") +
+        xlab("Age (years)") +
+        theme(legend.position="bottom") +
+        theme(legend.title=element_blank()) +
+        scale_color_manual(labels = c("Male", "Female"), values = c("orangered2", "dodgerblue2"))
+        #scale_color_manual(labels = c("Female", "Male"), values = c("dodgerblue2", "orangered2"))
+
+```
+
+Food choices
+
+```{r warning=FALSE}
+
+# All categories #
+
+mean_prtn_dat$other_pc_totprtn <- mean_prtn_dat$food_service_pc_totprtn + mean_prtn_dat$world_foods_pc_totprtn + 
+  mean_prtn_dat$customer_ordering_pc_totprtn + mean_prtn_dat$beer_wine_spirit_pc_totprtn + mean_prtn_dat$baby_beauty_pc_totprtn # Create 'other' category total
+
+mean_prtn_dat$other_pc_totprtn_stderr <- mean_prtn_dat$food_service_pc_totprtn_stderr + mean_prtn_dat$world_foods_pc_stderr + 
+  mean_prtn_dat$customer_ordering_pc_totprtn_stderr + mean_prtn_dat$beer_wine_spirit_pc_totprtn_stderr + mean_prtn_dat$baby_beauty_pc_totprtn_stderr # Create 'other' category stderr
+
+males <- mean_prtn_dat[mean_prtn_dat$GENDER == "M",]
+females <- mean_prtn_dat[mean_prtn_dat$GENDER == "F",]
+
+# Males
+library(reshape2)
+# Convert to long format - first % values
+male_long <- melt(males, id = "Age_130316", 
+                  measure = c("bakery_pc_totprtn", 
+                              "canned_packaged_pc_totprtn", "dairy_pc_totprtn",
+                              "food_for_later_pc_totprtn","food_to_go_pc_totprtn", 
+                              "frozen_food_pc_totprtn", "impluse_pc_totprtn", "meat_fish_poultry_pc_totprtn",
+                              "produce_pc_totprtn", "other_pc_totprtn"))
+# Now convert std errs
+male_long2 <- melt(males, id = "Age_130316", 
+                   measure = c("bakery_pc_totprtn_stderr", 
+                               "canned_packaged_pc_totprtn_stderr", "dairy_pc_totprtn_stderr",
+                               "food_for_later_pc_totprtn_stderr","food_to_go_pc_totprtn_stderr", 
+                               "frozen_food_pc_totprtn_stderr", "impluse_pc_totprtn_stderr", "meat_fish_poultry_pc_totprtn_stderr",
+                               "produce_pc_totprtn_stderr", "other_pc_totprtn_stderr"))
+male_long2$std_err <- male_long2$value
+
+male_long <- cbind(male_long, male_long2$std_err)
+
+# Calcuate 95% CIs
+male_long$low <- male_long$value - (male_long$`male_long2$std_err` * 1.96)
+male_long$high <- male_long$value + (male_long$`male_long2$std_err` * 1.96)
+
+ggplot(male_long, aes(x=Age_130316, y=value, group=variable, color=variable)) +
+    geom_line(aes(y=value, group=variable, color=variable), size = 1.5) +
+    geom_ribbon(data = male_long, aes(ymin=low, ymax=high), alpha=0.1, colour=NA) +
+    ylim(0,30) +
+    xlim(40,90) +
+    ylab("Percentage of total protein purchased by food category (%)") +
+    xlab("Age (years)") +
+    scale_color_manual(name = "Legend", 
+                        labels = c("Bread & Bakery", "Canned & Packaged Foods", 
+                                   "Dairy", "Ready to Cook",  "Ready to Eat",  
+                                   "Frozen Food", "Ambient Snacks & Soft Drinks", "Meat, Fish & Poutry", "Produce", "Other"),
+                        values =c("tan1", "dodgerblue2", "yellow2", "hotpink", "purple",
+                                  "cadetblue1", "grey60", "orangered2", "chartreuse3", "black"))
+
+```
+
+```{r}
+
+# Females
+female_long <- melt(females, id = "Age_130316", 
+                    measure = c("bakery_pc_totprtn", 
+                              "canned_packaged_pc_totprtn", "dairy_pc_totprtn",
+                              "food_for_later_pc_totprtn","food_to_go_pc_totprtn", 
+                              "frozen_food_pc_totprtn", "impluse_pc_totprtn", "meat_fish_poultry_pc_totprtn",
+                              "produce_pc_totprtn", "other_pc_totprtn"))
+
+female_long2 <- melt(females, id = "Age_130316", 
+                     measure = c("bakery_pc_totprtn_stderr", 
+                               "canned_packaged_pc_totprtn_stderr", "dairy_pc_totprtn_stderr",
+                               "food_for_later_pc_totprtn_stderr","food_to_go_pc_totprtn_stderr", 
+                               "frozen_food_pc_totprtn_stderr", "impluse_pc_totprtn_stderr", "meat_fish_poultry_pc_totprtn_stderr",
+                               "produce_pc_totprtn_stderr", "other_pc_totprtn_stderr"))
+
+female_long2$std_err <- female_long2$value
+female_long <- cbind(female_long, female_long2$std_err)
+
+female_long$low <- female_long$value - (female_long$`female_long2$std_err` * 1.96)
+female_long$high <- female_long$value + (female_long$`female_long2$std_err` * 1.96)
+
+ggplot(female_long, aes(x=Age_130316, y=value, group=variable, color=variable)) +
+  geom_line(aes(y=value, group=variable, color=variable), size = 1.5) +
+  geom_ribbon(data = female_long, aes(ymin=low, ymax=high), alpha=0.1, colour=NA) +
+  ylim(0,30) +
+  xlim(40,90) +
+  ylab("Percentage of total protein purchased by food category (%)") +
+  xlab("Age (years)") +
+  scale_color_manual(name = "Legend", 
+                     labels = c("Bread & Bakery", "Canned & Packaged Foods", 
+                                "Dairy", "Ready to Cook",  "Ready to Eat",  
+                                "Frozen Food", "Ambient Snacks & Soft Drinks", "Meat, Fish & Poutry", "Produce", "Other"),
+                     values =c("tan1", "dodgerblue2", "yellow2", "hotpink", "purple",
+                               "cadetblue1", "grey60", "orangered2", "chartreuse3", "black"))
+
+```
+
+Deprivation and food choices
+
+```{r}
+
+### First generate all male charts ###
+
+# By Deprivation level
+
+mean_prtn_imd_qnt <- read.csv("./Protein by IMD/Protein by IMD/mean_protein_imd_qnt.csv")
+mean_prtn_imd_qnt <- mean_prtn_imd_qnt[mean_prtn_imd_qnt$GENDER == "M" | mean_prtn_imd_qnt$GENDER == "F",] # Drop missing data
+mean_prtn_imd_qnt <- mean_prtn_imd_qnt[mean_prtn_imd_qnt$Age_130316 >= 40 & mean_prtn_imd_qnt$Age_130316 <=90,] # Drop below age 90
+
+mean_prtn_imd_qnt$other_pc_totprtn <- mean_prtn_imd_qnt$food_service_pc_totprtn + mean_prtn_imd_qnt$world_foods_pc_totprtn + 
+  mean_prtn_imd_qnt$customer_ordering_pc_totprtn + mean_prtn_imd_qnt$beer_wine_spirit_pc_totprtn + mean_prtn_imd_qnt$baby_beauty_pc_totprtn # Create 'other' category total
+
+mean_prtn_imd_qnt$other_pc_totprtn_stderr <- mean_prtn_imd_qnt$food_service_pc_totprtn_stderr + mean_prtn_imd_qnt$world_foods_pc_stderr + 
+  mean_prtn_imd_qnt$customer_ordering_pc_totprtn_stderr + mean_prtn_imd_qnt$beer_wine_spirit_pc_totprtn_stderr + mean_prtn_imd_qnt$baby_beauty_pc_totprtn_stderr # Create 'other' category stderr
+
+males_imd <- mean_prtn_imd_qnt[mean_prtn_imd_qnt$GENDER == "M",]
+females_imd <- mean_prtn_imd_qnt[mean_prtn_imd_qnt$GENDER == "F",]
+
+# Males
+library(reshape2)
+
+# Split by quintile
+mq1 <- males_imd[males_imd$quintile == 1,] # Most deprived
+mq2 <- males_imd[males_imd$quintile == 2,] # 
+mq3 <- males_imd[males_imd$quintile == 3,] # 
+mq4 <- males_imd[males_imd$quintile == 4,] # 
+mq5 <- males_imd[males_imd$quintile == 5,] # Least deprived
+
+# Quintile 1
+
+# Convert to long format first
+temp <- melt(mq1, id = "Age_130316", 
+                  measure = c("bakery_pc_totprtn", 
+                              "canned_packaged_pc_totprtn", "dairy_pc_totprtn",
+                              "food_for_later_pc_totprtn","food_to_go_pc_totprtn", 
+                              "frozen_food_pc_totprtn", "impluse_pc_totprtn", "meat_fish_poultry_pc_totprtn",
+                              "produce_pc_totprtn", "other_pc_totprtn"))
+
+temp2 <- melt(mq1, id = "Age_130316", 
+                     measure = c("bakery_pc_totprtn_stderr", 
+                               "canned_packaged_pc_totprtn_stderr", "dairy_pc_totprtn_stderr",
+                               "food_for_later_pc_totprtn_stderr","food_to_go_pc_totprtn_stderr", 
+                               "frozen_food_pc_totprtn_stderr", "impluse_pc_totprtn_stderr", "meat_fish_poultry_pc_totprtn_stderr",
+                               "produce_pc_totprtn_stderr", "other_pc_totprtn_stderr"))
+temp2$std_err <- temp2$value
+mq1_long <- cbind(temp, temp2$std_err)
+
+mq1_long$low <- mq1_long$value - (mq1_long$`temp2$std_err` * 1.96)
+mq1_long$high <- mq1_long$value + (mq1_long$`temp2$std_err` * 1.96)
+
+# Plot
+plot_mq1 <- ggplot(mq1_long, aes(x=Age_130316, y=value, group=variable, color=variable)) +
+              geom_point(aes(y=value, group=variable, color=variable), size = 1) +
+              geom_ribbon(data = mq1_long, aes(ymin=low, ymax=high), alpha=0.1, colour=NA) +
+              geom_smooth(method = "loess", size=1.2) +
+              #ylim(0,30) +
+              #xlim(40,90) +
+              coord_cartesian(ylim=c(0, 30), xlim=c(40,90)) + # So allows values that corss 0 to be plotted still (i.e. CIs - else are excluded)
+              ylab("Percentage (%)") +
+              xlab("Age (years)") +
+              theme_grey() +
+              scale_color_manual(name = "Legend", 
+                                 labels = c("Bread & Bakery", "Canned & Packaged Foods", 
+                                            "Dairy", "Ready to Cook",  "Ready to Eat",  
+                                            "Frozen Food", "Ambient Snacks & Soft Drinks", "Meat, Fish & Poutry", "Produce", "Other"),
+                                 values =c("tan1", "dodgerblue2", "yellow2", "hotpink", "purple",
+                                           "cadetblue1", "grey60", "orangered2", "chartreuse3", "black"))
+
+# Quintile 2
+
+# Convert to long format first
+temp <- melt(mq2, id = "Age_130316", 
+                  measure = c("bakery_pc_totprtn", 
+                              "canned_packaged_pc_totprtn", "dairy_pc_totprtn",
+                              "food_for_later_pc_totprtn","food_to_go_pc_totprtn", 
+                              "frozen_food_pc_totprtn", "impluse_pc_totprtn", "meat_fish_poultry_pc_totprtn",
+                              "produce_pc_totprtn", "other_pc_totprtn"))
+
+temp2 <- melt(mq2, id = "Age_130316", 
+                     measure = c("bakery_pc_totprtn_stderr", 
+                               "canned_packaged_pc_totprtn_stderr", "dairy_pc_totprtn_stderr",
+                               "food_for_later_pc_totprtn_stderr","food_to_go_pc_totprtn_stderr", 
+                               "frozen_food_pc_totprtn_stderr", "impluse_pc_totprtn_stderr", "meat_fish_poultry_pc_totprtn_stderr",
+                               "produce_pc_totprtn_stderr", "other_pc_totprtn_stderr"))
+temp2$std_err <- temp2$value
+mq2_long <- cbind(temp, temp2$std_err)
+
+mq2_long$low <- mq2_long$value - (mq2_long$`temp2$std_err` * 1.96)
+mq2_long$high <- mq2_long$value + (mq2_long$`temp2$std_err` * 1.96)
+
+# Plot
+plot_mq2 <- ggplot(mq2_long, aes(x=Age_130316, y=value, group=variable, color=variable)) +
+        geom_point(aes(y=value, group=variable, color=variable), size = 1) +
+        geom_ribbon(data = mq2_long, aes(ymin=low, ymax=high), alpha=0.1, colour=NA) +
+        geom_smooth(method = "loess", size=1.2) +
+        #ylim(0,30) +
+        #xlim(40,90) +
+        coord_cartesian(ylim=c(0, 30), xlim=c(40,90)) + # So allows values that corss 0 to be plotted still (i.e. CIs - else are excluded)
+        ylab("Percentage (%)") +
+        xlab("Age (years)") +
+        theme_grey() +
+        scale_color_manual(name = "Legend", 
+                           labels = c("Bread & Bakery", "Canned & Packaged Foods", 
+                                      "Dairy", "Ready to Cook",  "Ready to Eat",  
+                                      "Frozen Food", "Ambient Snacks & Soft Drinks", "Meat, Fish & Poutry", "Produce", "Other"),
+                           values =c("tan1", "dodgerblue2", "yellow2", "hotpink", "purple",
+                                     "cadetblue1", "grey60", "orangered2", "chartreuse3", "black"))
+
+# Quintile 3
+
+# Convert to long format first
+temp <- melt(mq3, id = "Age_130316", 
+                  measure = c("bakery_pc_totprtn", 
+                              "canned_packaged_pc_totprtn", "dairy_pc_totprtn",
+                              "food_for_later_pc_totprtn","food_to_go_pc_totprtn", 
+                              "frozen_food_pc_totprtn", "impluse_pc_totprtn", "meat_fish_poultry_pc_totprtn",
+                              "produce_pc_totprtn", "other_pc_totprtn"))
+
+temp2 <- melt(mq3, id = "Age_130316", 
+                     measure = c("bakery_pc_totprtn_stderr", 
+                               "canned_packaged_pc_totprtn_stderr", "dairy_pc_totprtn_stderr",
+                               "food_for_later_pc_totprtn_stderr","food_to_go_pc_totprtn_stderr", 
+                               "frozen_food_pc_totprtn_stderr", "impluse_pc_totprtn_stderr", "meat_fish_poultry_pc_totprtn_stderr",
+                               "produce_pc_totprtn_stderr", "other_pc_totprtn_stderr"))
+temp2$std_err <- temp2$value
+mq3_long <- cbind(temp, temp2$std_err)
+
+mq3_long$low <- mq3_long$value - (mq3_long$`temp2$std_err` * 1.96)
+mq3_long$high <- mq3_long$value + (mq3_long$`temp2$std_err` * 1.96)
+
+# Plot
+plot_mq3 <- ggplot(mq3_long, aes(x=Age_130316, y=value, group=variable, color=variable)) +
+              geom_point(aes(y=value, group=variable, color=variable), size = 1) +
+              geom_ribbon(data = mq3_long, aes(ymin=low, ymax=high), alpha=0.1, colour=NA) +
+              geom_smooth(method = "loess", size=1.2) +
+              #ylim(0,30) +
+              #xlim(40,90) +
+              coord_cartesian(ylim=c(0, 30), xlim=c(40,90)) + # So allows values that corss 0 to be plotted still (i.e. CIs - else are excluded)
+              ylab("Percentage (%)") +
+              xlab("Age (years)") +
+              theme_grey() +
+              scale_color_manual(name = "Legend", 
+                                 labels = c("Bread & Bakery", "Canned & Packaged Foods", 
+                                            "Dairy", "Ready to Cook",  "Ready to Eat",  
+                                            "Frozen Food", "Ambient Snacks & Soft Drinks", "Meat, Fish & Poutry", "Produce", "Other"),
+                                 values =c("tan1", "dodgerblue2", "yellow2", "hotpink", "purple",
+                                           "cadetblue1", "grey60", "orangered2", "chartreuse3", "black"))
+
+# Quintile 4
+
+# Convert to long format first
+temp <- melt(mq4, id = "Age_130316", 
+                  measure = c("bakery_pc_totprtn", 
+                              "canned_packaged_pc_totprtn", "dairy_pc_totprtn",
+                              "food_for_later_pc_totprtn","food_to_go_pc_totprtn", 
+                              "frozen_food_pc_totprtn", "impluse_pc_totprtn", "meat_fish_poultry_pc_totprtn",
+                              "produce_pc_totprtn", "other_pc_totprtn"))
+
+temp2 <- melt(mq4, id = "Age_130316", 
+                     measure = c("bakery_pc_totprtn_stderr", 
+                               "canned_packaged_pc_totprtn_stderr", "dairy_pc_totprtn_stderr",
+                               "food_for_later_pc_totprtn_stderr","food_to_go_pc_totprtn_stderr", 
+                               "frozen_food_pc_totprtn_stderr", "impluse_pc_totprtn_stderr", "meat_fish_poultry_pc_totprtn_stderr",
+                               "produce_pc_totprtn_stderr", "other_pc_totprtn_stderr"))
+temp2$std_err <- temp2$value
+mq4_long <- cbind(temp, temp2$std_err)
+
+mq4_long$low <- mq4_long$value - (mq4_long$`temp2$std_err` * 1.96)
+mq4_long$high <- mq4_long$value + (mq4_long$`temp2$std_err` * 1.96)
+
+# Plot
+plot_mq4 <- ggplot(mq4_long, aes(x=Age_130316, y=value, group=variable, color=variable)) +
+              geom_point(aes(y=value, group=variable, color=variable), size = 1) +
+              geom_ribbon(data = mq4_long, aes(ymin=low, ymax=high), alpha=0.1, colour=NA) +
+              geom_smooth(method = "loess", size=1.2) +
+              #ylim(0,30) +
+              #xlim(40,90) +
+              coord_cartesian(ylim=c(0, 30), xlim=c(40,90)) + # So allows values that corss 0 to be plotted still (i.e. CIs - else are excluded)
+              ylab("Percentage (%)") +
+              xlab("Age (years)") +
+              theme_grey() +
+              scale_color_manual(name = "Legend", 
+                                 labels = c("Bread & Bakery", "Canned & Packaged Foods", 
+                                            "Dairy", "Ready to Cook",  "Ready to Eat",  
+                                            "Frozen Food", "Ambient Snacks & Soft Drinks", "Meat, Fish & Poutry", "Produce", "Other"),
+                                 values =c("tan1", "dodgerblue2", "yellow2", "hotpink", "purple",
+                                           "cadetblue1", "grey60", "orangered2", "chartreuse3", "black"))
+
+# Quintile 5
+
+# Convert to long format first
+temp <- melt(mq5, id = "Age_130316", 
+                  measure = c("bakery_pc_totprtn", 
+                              "canned_packaged_pc_totprtn", "dairy_pc_totprtn",
+                              "food_for_later_pc_totprtn","food_to_go_pc_totprtn", 
+                              "frozen_food_pc_totprtn", "impluse_pc_totprtn", "meat_fish_poultry_pc_totprtn",
+                              "produce_pc_totprtn", "other_pc_totprtn"))
+
+temp2 <- melt(mq5, id = "Age_130316", 
+                     measure = c("bakery_pc_totprtn_stderr", 
+                               "canned_packaged_pc_totprtn_stderr", "dairy_pc_totprtn_stderr",
+                               "food_for_later_pc_totprtn_stderr","food_to_go_pc_totprtn_stderr", 
+                               "frozen_food_pc_totprtn_stderr", "impluse_pc_totprtn_stderr", "meat_fish_poultry_pc_totprtn_stderr",
+                               "produce_pc_totprtn_stderr", "other_pc_totprtn_stderr"))
+temp2$std_err <- temp2$value
+mq5_long <- cbind(temp, temp2$std_err)
+
+mq5_long$low <- mq5_long$value - (mq5_long$`temp2$std_err` * 1.96)
+mq5_long$high <- mq5_long$value + (mq5_long$`temp2$std_err` * 1.96)
+
+# Plot
+plot_mq5 <- ggplot(mq5_long, aes(x=Age_130316, y=value, group=variable, color=variable)) +
+              geom_point(aes(y=value, group=variable, color=variable), size = 1) +
+              geom_ribbon(data = mq5_long, aes(ymin=low, ymax=high), alpha=0.1, colour=NA) +
+              geom_smooth(method = "loess", size=1.2) +
+              #ylim(0,30) +
+              #xlim(40,90) +
+              coord_cartesian(ylim=c(0, 30), xlim=c(40,90)) + # So allows values that corss 0 to be plotted still (i.e. CIs - else are excluded)
+              ylab("Percentage (%)") +
+              xlab("Age (years)") +
+              theme_grey() +
+              scale_color_manual(name = "Legend", 
+                                 labels = c("Bread & Bakery", "Canned & Packaged Foods", 
+                                            "Dairy", "Ready to Cook",  "Ready to Eat",  
+                                            "Frozen Food", "Ambient Snacks & Soft Drinks", "Meat, Fish & Poutry", "Produce", "Other"),
+                                 values =c("tan1", "dodgerblue2", "yellow2", "hotpink", "purple",
+                                           "cadetblue1", "grey60", "orangered2", "chartreuse3", "black"))
+```
+
+Create single joined up plot
+
+```{r}
+
+library(cowplot)
+#library(gridExtra)
+
+# Function to store legend
+get_legend<-function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+legend <- get_legend(plot_mq1) # Store legend
+
+# remove legends
+plot_mq1 <- plot_mq1 + theme(legend.position = "none")
+plot_mq2 <- plot_mq2 + theme(legend.position = "none")
+plot_mq3 <- plot_mq3 + theme(legend.position = "none")
+plot_mq4 <- plot_mq4 + theme(legend.position = "none")
+plot_mq5 <- plot_mq5 + theme(legend.position = "none")
+
+# Join together and save
+# pdf("./males_food_choices.pdf", width = 8, height = 12) 
+# grid.arrange(plot_mq1, plot_mq2, plot_mq3, plot_mq4, plot_mq5, legend, ncol = 2, nrow = 3,
+#              widths = c(2.7, 2.7), heights = c( 2.7, 2.7, 2.7))
+# dev.off()
+
+pdf("./males_food_choices.pdf", width = 8, height = 12) 
+plot_grid(plot_mq1, plot_mq2, plot_mq3, plot_mq4, plot_mq5, legend, labels = c("A", "B", "C", "D", "E"), ncol = 2)
+dev.off()
+
+
+```
+
+Do the same for females
+
+```{r}
+
+### First generate all male charts ###
+
+
+# Males
+library(reshape2)
+
+# Split by quintile
+fq1 <- females_imd[females_imd$quintile == 1,] # Most deprived
+fq2 <- females_imd[females_imd$quintile == 2,] # 
+fq3 <- females_imd[females_imd$quintile == 3,] # 
+fq4 <- females_imd[females_imd$quintile == 4,] # 
+fq5 <- females_imd[females_imd$quintile == 5,] # Least deprived
+
+# Quintile 1
+
+# Convert to long format first
+temp <- melt(fq1, id = "Age_130316", 
+                  measure = c("bakery_pc_totprtn", 
+                              "canned_packaged_pc_totprtn", "dairy_pc_totprtn",
+                              "food_for_later_pc_totprtn","food_to_go_pc_totprtn", 
+                              "frozen_food_pc_totprtn", "impluse_pc_totprtn", "meat_fish_poultry_pc_totprtn",
+                              "produce_pc_totprtn", "other_pc_totprtn"))
+
+temp2 <- melt(fq1, id = "Age_130316", 
+                     measure = c("bakery_pc_totprtn_stderr", 
+                               "canned_packaged_pc_totprtn_stderr", "dairy_pc_totprtn_stderr",
+                               "food_for_later_pc_totprtn_stderr","food_to_go_pc_totprtn_stderr", 
+                               "frozen_food_pc_totprtn_stderr", "impluse_pc_totprtn_stderr", "meat_fish_poultry_pc_totprtn_stderr",
+                               "produce_pc_totprtn_stderr", "other_pc_totprtn_stderr"))
+temp2$std_err <- temp2$value
+fq1_long <- cbind(temp, temp2$std_err)
+
+fq1_long$low <- fq1_long$value - (fq1_long$`temp2$std_err` * 1.96)
+fq1_long$high <- fq1_long$value + (fq1_long$`temp2$std_err` * 1.96)
+
+# Plot
+plot_fq1 <- ggplot(fq1_long, aes(x=Age_130316, y=value, group=variable, color=variable)) +
+              geom_point(aes(y=value, group=variable, color=variable), size = 1) +
+              geom_ribbon(data = fq1_long, aes(ymin=low, ymax=high), alpha=0.1, colour=NA) +
+              geom_smooth(method = "loess", size=1.2) +
+              #ylim(0,30) +
+              #xlim(40,90) +
+              coord_cartesian(ylim=c(0, 30), xlim=c(40,90)) + # So allows values that corss 0 to be plotted still (i.e. CIs - else are excluded)
+              ylab("Percentage (%)") +
+              xlab("Age (years)") +
+              theme_grey() +
+              scale_color_manual(name = "Legend", 
+                                 labels = c("Bread & Bakery", "Canned & Packaged Foods", 
+                                            "Dairy", "Ready to Cook",  "Ready to Eat",  
+                                            "Frozen Food", "Ambient Snacks & Soft Drinks", "Meat, Fish & Poutry", "Produce", "Other"),
+                                 values =c("tan1", "dodgerblue2", "yellow2", "hotpink", "purple",
+                                           "cadetblue1", "grey60", "orangered2", "chartreuse3", "black"))
+
+# Quintile 2
+
+# Convert to long format first
+temp <- melt(fq2, id = "Age_130316", 
+                  measure = c("bakery_pc_totprtn", 
+                              "canned_packaged_pc_totprtn", "dairy_pc_totprtn",
+                              "food_for_later_pc_totprtn","food_to_go_pc_totprtn", 
+                              "frozen_food_pc_totprtn", "impluse_pc_totprtn", "meat_fish_poultry_pc_totprtn",
+                              "produce_pc_totprtn", "other_pc_totprtn"))
+
+temp2 <- melt(fq2, id = "Age_130316", 
+                     measure = c("bakery_pc_totprtn_stderr", 
+                               "canned_packaged_pc_totprtn_stderr", "dairy_pc_totprtn_stderr",
+                               "food_for_later_pc_totprtn_stderr","food_to_go_pc_totprtn_stderr", 
+                               "frozen_food_pc_totprtn_stderr", "impluse_pc_totprtn_stderr", "meat_fish_poultry_pc_totprtn_stderr",
+                               "produce_pc_totprtn_stderr", "other_pc_totprtn_stderr"))
+temp2$std_err <- temp2$value
+fq2_long <- cbind(temp, temp2$std_err)
+
+fq2_long$low <- fq2_long$value - (fq2_long$`temp2$std_err` * 1.96)
+fq2_long$high <- fq2_long$value + (fq2_long$`temp2$std_err` * 1.96)
+
+# Plot
+plot_fq2 <- ggplot(fq2_long, aes(x=Age_130316, y=value, group=variable, color=variable)) +
+        geom_point(aes(y=value, group=variable, color=variable), size = 1) +
+        geom_ribbon(data = fq2_long, aes(ymin=low, ymax=high), alpha=0.1, colour=NA) +
+        geom_smooth(method = "loess", size=1.2) +
+        #ylim(0,30) +
+        #xlim(40,90) +
+        coord_cartesian(ylim=c(0, 30), xlim=c(40,90)) + # So allows values that corss 0 to be plotted still (i.e. CIs - else are excluded)
+        ylab("Percentage (%)") +
+        xlab("Age (years)") +
+        theme_grey() +
+        scale_color_manual(name = "Legend", 
+                           labels = c("Bread & Bakery", "Canned & Packaged Foods", 
+                                      "Dairy", "Ready to Cook",  "Ready to Eat",  
+                                      "Frozen Food", "Ambient Snacks & Soft Drinks", "Meat, Fish & Poutry", "Produce", "Other"),
+                           values =c("tan1", "dodgerblue2", "yellow2", "hotpink", "purple",
+                                     "cadetblue1", "grey60", "orangered2", "chartreuse3", "black"))
+
+# Quintile 3
+
+# Convert to long format first
+temp <- melt(fq3, id = "Age_130316", 
+                  measure = c("bakery_pc_totprtn", 
+                              "canned_packaged_pc_totprtn", "dairy_pc_totprtn",
+                              "food_for_later_pc_totprtn","food_to_go_pc_totprtn", 
+                              "frozen_food_pc_totprtn", "impluse_pc_totprtn", "meat_fish_poultry_pc_totprtn",
+                              "produce_pc_totprtn", "other_pc_totprtn"))
+
+temp2 <- melt(fq3, id = "Age_130316", 
+                     measure = c("bakery_pc_totprtn_stderr", 
+                               "canned_packaged_pc_totprtn_stderr", "dairy_pc_totprtn_stderr",
+                               "food_for_later_pc_totprtn_stderr","food_to_go_pc_totprtn_stderr", 
+                               "frozen_food_pc_totprtn_stderr", "impluse_pc_totprtn_stderr", "meat_fish_poultry_pc_totprtn_stderr",
+                               "produce_pc_totprtn_stderr", "other_pc_totprtn_stderr"))
+temp2$std_err <- temp2$value
+fq3_long <- cbind(temp, temp2$std_err)
+
+fq3_long$low <- fq3_long$value - (fq3_long$`temp2$std_err` * 1.96)
+fq3_long$high <- fq3_long$value + (fq3_long$`temp2$std_err` * 1.96)
+
+# Plot
+plot_fq3 <- ggplot(fq3_long, aes(x=Age_130316, y=value, group=variable, color=variable)) +
+              geom_point(aes(y=value, group=variable, color=variable), size = 1) +
+              geom_ribbon(data = fq3_long, aes(ymin=low, ymax=high), alpha=0.1, colour=NA) +
+              geom_smooth(method = "loess", size=1.2) +
+              #ylim(0,30) +
+              #xlim(40,90) +
+              coord_cartesian(ylim=c(0, 30), xlim=c(40,90)) + # So allows values that corss 0 to be plotted still (i.e. CIs - else are excluded)
+              ylab("Percentage (%)") +
+              xlab("Age (years)") +
+              theme_grey() +
+              scale_color_manual(name = "Legend", 
+                                 labels = c("Bread & Bakery", "Canned & Packaged Foods", 
+                                            "Dairy", "Ready to Cook",  "Ready to Eat",  
+                                            "Frozen Food", "Ambient Snacks & Soft Drinks", "Meat, Fish & Poutry", "Produce", "Other"),
+                                 values =c("tan1", "dodgerblue2", "yellow2", "hotpink", "purple",
+                                           "cadetblue1", "grey60", "orangered2", "chartreuse3", "black"))
+
+# Quintile 4
+
+# Convert to long format first
+temp <- melt(fq4, id = "Age_130316", 
+                  measure = c("bakery_pc_totprtn", 
+                              "canned_packaged_pc_totprtn", "dairy_pc_totprtn",
+                              "food_for_later_pc_totprtn","food_to_go_pc_totprtn", 
+                              "frozen_food_pc_totprtn", "impluse_pc_totprtn", "meat_fish_poultry_pc_totprtn",
+                              "produce_pc_totprtn", "other_pc_totprtn"))
+
+temp2 <- melt(fq4, id = "Age_130316", 
+                     measure = c("bakery_pc_totprtn_stderr", 
+                               "canned_packaged_pc_totprtn_stderr", "dairy_pc_totprtn_stderr",
+                               "food_for_later_pc_totprtn_stderr","food_to_go_pc_totprtn_stderr", 
+                               "frozen_food_pc_totprtn_stderr", "impluse_pc_totprtn_stderr", "meat_fish_poultry_pc_totprtn_stderr",
+                               "produce_pc_totprtn_stderr", "other_pc_totprtn_stderr"))
+temp2$std_err <- temp2$value
+fq4_long <- cbind(temp, temp2$std_err)
+
+fq4_long$low <- fq4_long$value - (fq4_long$`temp2$std_err` * 1.96)
+fq4_long$high <- fq4_long$value + (fq4_long$`temp2$std_err` * 1.96)
+
+# Plot
+plot_fq4 <- ggplot(fq4_long, aes(x=Age_130316, y=value, group=variable, color=variable)) +
+              geom_point(aes(y=value, group=variable, color=variable), size = 1) +
+              geom_ribbon(data = fq4_long, aes(ymin=low, ymax=high), alpha=0.1, colour=NA) +
+              geom_smooth(method = "loess", size=1.2) +
+              #ylim(0,30) +
+              #xlim(40,90) +
+              coord_cartesian(ylim=c(0, 30), xlim=c(40,90)) + # So allows values that corss 0 to be plotted still (i.e. CIs - else are excluded)
+              ylab("Percentage (%)") +
+              xlab("Age (years)") +
+              theme_grey() +
+              scale_color_manual(name = "Legend", 
+                                 labels = c("Bread & Bakery", "Canned & Packaged Foods", 
+                                            "Dairy", "Ready to Cook",  "Ready to Eat",  
+                                            "Frozen Food", "Ambient Snacks & Soft Drinks", "Meat, Fish & Poutry", "Produce", "Other"),
+                                 values =c("tan1", "dodgerblue2", "yellow2", "hotpink", "purple",
+                                           "cadetblue1", "grey60", "orangered2", "chartreuse3", "black"))
+
+# Quintile 5
+
+# Convert to long format first
+temp <- melt(fq5, id = "Age_130316", 
+                  measure = c("bakery_pc_totprtn", 
+                              "canned_packaged_pc_totprtn", "dairy_pc_totprtn",
+                              "food_for_later_pc_totprtn","food_to_go_pc_totprtn", 
+                              "frozen_food_pc_totprtn", "impluse_pc_totprtn", "meat_fish_poultry_pc_totprtn",
+                              "produce_pc_totprtn", "other_pc_totprtn"))
+
+temp2 <- melt(fq5, id = "Age_130316", 
+                     measure = c("bakery_pc_totprtn_stderr", 
+                               "canned_packaged_pc_totprtn_stderr", "dairy_pc_totprtn_stderr",
+                               "food_for_later_pc_totprtn_stderr","food_to_go_pc_totprtn_stderr", 
+                               "frozen_food_pc_totprtn_stderr", "impluse_pc_totprtn_stderr", "meat_fish_poultry_pc_totprtn_stderr",
+                               "produce_pc_totprtn_stderr", "other_pc_totprtn_stderr"))
+temp2$std_err <- temp2$value
+fq5_long <- cbind(temp, temp2$std_err)
+
+fq5_long$low <- fq5_long$value - (fq5_long$`temp2$std_err` * 1.96)
+fq5_long$high <- fq5_long$value + (fq5_long$`temp2$std_err` * 1.96)
+
+# Plot
+plot_fq5 <- ggplot(fq5_long, aes(x=Age_130316, y=value, group=variable, color=variable)) +
+              geom_point(aes(y=value, group=variable, color=variable), size = 1) +
+              geom_ribbon(data = fq5_long, aes(ymin=low, ymax=high), alpha=0.1, colour=NA) +
+              geom_smooth(method = "loess", size=1.2) +
+              #ylim(0,30) +
+              #xlim(40,90) +
+              coord_cartesian(ylim=c(0, 30), xlim=c(40,90)) + # So allows values that corss 0 to be plotted still (i.e. CIs - else are excluded)
+              ylab("Percentage (%)") +
+              xlab("Age (years)") +
+              theme_grey() +
+              scale_color_manual(name = "Legend", 
+                                 labels = c("Bread & Bakery", "Canned & Packaged Foods", 
+                                            "Dairy", "Ready to Cook",  "Ready to Eat",  
+                                            "Frozen Food", "Ambient Snacks & Soft Drinks", "Meat, Fish & Poutry", "Produce", "Other"),
+                                 values =c("tan1", "dodgerblue2", "yellow2", "hotpink", "purple",
+                                           "cadetblue1", "grey60", "orangered2", "chartreuse3", "black"))
+```
+
+Save plot
+
+```{r}
+
+library(cowplot)
+#library(gridExtra)
+
+# Function to store legend
+get_legend<-function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+legend <- get_legend(plot_fq1) # Store legend
+
+# remove legends
+plot_fq1 <- plot_fq1 + theme(legend.position = "none")
+plot_fq2 <- plot_fq2 + theme(legend.position = "none")
+plot_fq3 <- plot_fq3 + theme(legend.position = "none")
+plot_fq4 <- plot_fq4 + theme(legend.position = "none")
+plot_fq5 <- plot_fq5 + theme(legend.position = "none")
+
+# Join together and save
+# pdf("./males_food_choices.pdf", width = 8, height = 12) 
+# grid.arrange(plot_mq1, plot_mq2, plot_mq3, plot_mq4, plot_mq5, legend, ncol = 2, nrow = 3,
+#              widths = c(2.7, 2.7), heights = c( 2.7, 2.7, 2.7))
+# dev.off()
+
+pdf("./females_food_choices.pdf", width = 8, height = 12) 
+plot_grid(plot_fq1, plot_fq2, plot_fq3, plot_fq4, plot_fq5, legend, labels = c("A", "B", "C", "D", "E"), ncol = 2)
+dev.off()
+
+
+```
